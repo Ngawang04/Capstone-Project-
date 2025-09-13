@@ -17,8 +17,9 @@ AI-powered inventory forecasting and optimization platform for small and medium 
 - PostgreSQL (RDS), AWS EC2/Elastic Beanstalk, S3, Cognito
 
 ## Getting Started
-(Instructions for how to run your app will go here)
+
 
 ## Authors
-[List team members here]
+Ngawang Choega
+Dhruv Mane
 
