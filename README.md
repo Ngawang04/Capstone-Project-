@@ -20,6 +20,6 @@ AI-powered inventory forecasting and optimization platform for small and medium 
 
 
 ## Authors
-Ngawang Choega
-Dhruv Mane
+- Ngawang Choega
+- Dhruv Mane
 
