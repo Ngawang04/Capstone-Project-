@@ -27,7 +27,7 @@ InventoryAI is a streamlined, cloud-based web application that empowers small an
 ## Tech Stack
 
 ### Frontend (and Fullstack UI)
-- **Python 3.x**
+- **Python 3.12.8
 - **Streamlit** (UI components, routing, application logic)
 - **Plotly/Streamlit Native Charts** (visualizations)
 - **AWS Cognito** (authentication)
@@ -85,6 +85,8 @@ InventoryAI enables SMBs to:
 **Authors**
 -  Ngawang Choega
 -  Dhruv Mane
+-  Divij Acharya
+
 
 **Acknowledgements**
 - Prof. Darsh Joshi
@@ -93,3 +95,4 @@ InventoryAI enables SMBs to:
 ---
 
 _For questions or issues, open a GitHub issue or reach out to a project author._
+
