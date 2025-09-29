@@ -47,7 +47,7 @@ InventoryAI is a streamlined, cloud-based web application that empowers small an
 
 For the most current status, task assignments, and detailed progress on the **InventoryAI** project, please refer to our dedicated, live project board. We are using a Kanban board to manage our workflow.
 
-➡️ **[InventoryAI Live Project Tracker on Notion](https://www.notion.so/27b4d5b4186f8013af55e6551ba1bb96?v=27b4d5b4186f8079a213000cba5b2639&source=copy_link)** ⬅️
+➡️ **[InventoryAI Live Project Tracker on Notion](https://www.notion.so/27d4d5b4186f8013aefbfa84767d86d4?v=27d4d5b4186f803399b4000c947cf238&source=copy_link)** ⬅️
 
 ---
 
@@ -95,4 +95,5 @@ InventoryAI enables SMBs to:
 ---
 
 _For questions or issues, open a GitHub issue or reach out to a project author._
+
 
