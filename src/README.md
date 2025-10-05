@@ -7,6 +7,6 @@ Goal: Determine the most accurate model (Prophet, Ridge, or Naive) by comparing 
 📊 Model Performance Comparison (W&B Dashboard)
 All experiment results are logged in real-time to Weights & Biases (W&B). The initial comparison confirms the Prophet Model is the strongest candidate, achieving the lowest error (lowest MAE/MAPE).
 
-➡️ VIEW LIVE MODEL COMPARISON HERE:
+➡️ VIEW MODEL MODEL PERFORMANCE COMPARISON HERE:
 
 [W&B Project Dashboard Link] (Use the URL:  https://wandb.ai/ngawang-pace-university/InventoryAI-Capstone?nw=nwuserngawang)
