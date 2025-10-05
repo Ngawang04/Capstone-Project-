@@ -76,6 +76,44 @@ def calculate_metrics(y_true, y_pred):
         'RMSE': round(rmse, 2)
     }
 
+# In src/model_engine.py (Place this function below calculate_metrics)
+
+def predict_naive_seasonal(df_aggregate: pd.DataFrame, store_id: str):
+    """
+    Predicts sales using the value from the same day in the previous week (Lag 7).
+    This establishes the minimum accuracy benchmark and logs the result to W&B.
+    """
+    VAL_PERIOD = 28
+    
+    # 1. Start the W&B Experiment Run (Assigns credit and name for the chart)
+    # The run name clearly labels Divij's contribution
+    with wandb.init(project="InventoryAI-Capstone", name=f"Divij-Naive-Baseline-{store_id}", reinit=True) as run:
+        
+        # Save configuration
+        run.config.model_type = 'Seasonal Naive (Lag 7)'
+        run.config.store = store_id
+        
+        # 2. Create Lagged Column (The prediction)
+        # Variable name is generic: 'y_lag_7'
+        df_aggregate['y_lag_7'] = df_aggregate['y'].shift(7)
+        
+        # 3. Extract true values and predictions for the last 28-day validation period
+        df_val = df_aggregate.iloc[-VAL_PERIOD:].copy()
+        
+        y_true = df_val['y'].values
+        y_pred = df_val['y_lag_7'].values
+        
+        # 4. Evaluate Metrics
+        metrics = calculate_metrics(y_true, y_pred)
+        
+        # 5. Log results to W&B
+        run.log(metrics)
+        
+        print(f"\nNaive Baseline Complete for {store_id}. Metrics Logged to W&B:")
+        print(metrics)
+        
+    return metrics
+
 if __name__ == '__main__':
     TEST_STATE = 'CA'
     VAL_PERIOD = 28 # Days to hold out for testing/validation
@@ -126,3 +164,15 @@ if __name__ == '__main__':
         
         print("\nValidation Complete. Metrics Logged to W&B:")
         print(metrics)
+
+    # --- Divij's Naive Baseline Test ---
+    TEST_STATE = 'WI' 
+    
+    # We load the data for the assigned test set
+    df_divij, _ = load_and_aggregate_data(TEST_STATE) 
+    
+    # 💡 The function is called generically, and the result is stored in a generic variable:
+    naive_metrics = predict_naive_seasonal(df_divij, TEST_STATE)
+    
+    print(f"\nFinal Naive Baseline Test Complete. Metrics: {naive_metrics}")
+    
