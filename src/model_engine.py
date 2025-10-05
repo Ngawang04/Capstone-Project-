@@ -4,6 +4,8 @@ from prophet import Prophet
 import os
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import wandb # The Weights & Biases SDK
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import train_test_split 
 
 # Define the path to the processed parquet file
 PROCESSED_DATA_PATH = '/Users/ngachoe2002/Desktop/inventoryai/data/processed/df_final_full.parquet' 
@@ -33,6 +35,24 @@ def load_and_aggregate_data(state_id: str):
     # return the data, along with the original DataFrame for a future optimization step
     return df_aggregate, df_full.head(10) # Return a small sample of the full data for context if needed
 
+def create_time_features_for_ml(df: pd.DataFrame):
+    """Extracts required numerical features from the 'ds' column for linear models."""
+    
+    # 1. Extract Time Features
+    df['day_of_week'] = df['ds'].dt.dayofweek # 0=Monday, 6=Sunday
+    df['month'] = df['ds'].dt.month           # 1-12
+    # Keep the existing 'is_event' flag
+
+    # 2. Convert Categorical Time Features (Day and Month) into Numbers
+    # One-hot encoding creates a new column for each unique value (e.g., 'day_of_week_0', 'day_of_week_1', etc.)
+    df_features = pd.get_dummies(df, columns=['day_of_week', 'month'], drop_first=True)
+    
+    # 3. Select final feature set
+    # Features (X) will be everything except the target 'y'
+    X = df_features.drop(columns=['ds', 'y'])
+    y = df_features['y']
+    
+    return X, y
 
 def train_prophet_model(df_train: pd.DataFrame):
     """
@@ -54,6 +74,43 @@ def train_prophet_model(df_train: pd.DataFrame):
     m.fit(df_train)
     
     return m
+    
+def train_ridge_model(df_aggregate: pd.DataFrame, store_id: str):
+    """
+    Trains a Ridge Regression model on engineered calendar features (Dhruv's Benchmark).
+    """
+    VAL_PERIOD = 28
+    
+    # 1. Initialize W&B Run
+    with wandb.init(project="InventoryAI-Capstone", name=f"Dhruv-Ridge-Benchmark-{store_id}", reinit=True) as run:
+        run.config.model_type = 'Ridge Regression (Scikit-learn)'
+        run.config.alpha = 1.0 # Ridge Hyperparameter
+
+        # 2. Prepare features (X) and target (y)
+        X_all, y_all = create_time_features_for_ml(df_aggregate)
+
+        # 3. Split Data Time-Awarely (Train on past, validate on last 28 days)
+        X_train = X_all.iloc[:-VAL_PERIOD]
+        y_train = y_all.iloc[:-VAL_PERIOD]
+        
+        X_val = X_all.iloc[-VAL_PERIOD:]
+        y_val = y_all.iloc[-VAL_PERIOD:]
+        
+        # 4. Initialize and Train the Model
+        model = Ridge(alpha=run.config.alpha)
+        model.fit(X_train, y_train)
+        
+        # 5. Predict and Evaluate
+        y_pred = model.predict(X_val)
+        
+        metrics = calculate_metrics(y_val, y_pred)
+        
+        # 6. Log results to W&B
+        run.log(metrics)
+        
+        print(f"\nRidge Benchmark Complete for {store_id}. Metrics Logged to W&B.")
+        
+    return metrics
 
 # Performance metrics for Prophet model
 def calculate_metrics(y_true, y_pred):
@@ -175,4 +232,13 @@ if __name__ == '__main__':
     naive_metrics = predict_naive_seasonal(df_divij, TEST_STATE)
     
     print(f"\nFinal Naive Baseline Test Complete. Metrics: {naive_metrics}")
+
+    # --- Dhruv's Ridge Regression Test ---
+    TEST_STATE_DHRUV = 'CA' 
+    # We load the data for Dhruv's assigned test set (CA aggregate)
+    df_dhruv, _ = load_and_aggregate_data(TEST_STATE_DHRUV) 
+
+    # Run the Ridge model and log results to W&B
+    ridge_metrics = train_ridge_model(df_dhruv, TEST_STATE_DHRUV)
+    print(f"\nDhruv's Ridge Metrics ({TEST_STATE_DHRUV}): {ridge_metrics}")
     
