@@ -211,3 +211,9 @@ data/*.csv
 data/*.parquet
 data/*.gz
 data/processed/
+
+# W&B Log Files
+wandb/
+
+# macOS Junk
+.DS_Store
