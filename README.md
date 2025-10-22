@@ -27,7 +27,7 @@ InventoryAI is a streamlined, cloud-based web application that empowers small an
 ## Tech Stack
 
 ### Frontend (and Fullstack UI)
-- **Python 3.x**
+- **Python 3.12.6**
 - **Streamlit** (UI components, routing, application logic)
 - **Plotly/Streamlit Native Charts** (visualizations)
 - **AWS Cognito** (authentication)
@@ -47,7 +47,7 @@ InventoryAI is a streamlined, cloud-based web application that empowers small an
 
 For the most current status, task assignments, and detailed progress on the **InventoryAI** project, please refer to our dedicated, live project board. We are using a Kanban board to manage our workflow.
 
-➡️ **[InventoryAI Live Project Tracker on Notion](https://www.notion.so/27b4d5b4186f8013af55e6551ba1bb96?v=27b4d5b4186f8079a213000cba5b2639&source=copy_link)** ⬅️
+➡️ **[InventoryAI Live Project Tracker on Notion](https://www.notion.so/27d4d5b4186f8013aefbfa84767d86d4?v=27d4d5b4186f80e2ba4d000cc763ec25&source=copy_link)** ⬅️
 
 ---
 
