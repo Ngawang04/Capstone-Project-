@@ -1,244 +1,221 @@
-import pandas as pd
-import numpy as np
-from prophet import Prophet
+import json
 import os
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-import wandb # The Weights & Biases SDK
+
+import numpy as np
+import pandas as pd
+from prophet import Prophet
+from prophet.serialize import model_to_json
 from sklearn.linear_model import Ridge
-from sklearn.model_selection import train_test_split 
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import wandb  # The Weights & Biases SDK
 
-# Define the path to the processed parquet file
-PROCESSED_DATA_PATH = '/Users/ngachoe2002/Desktop/inventoryai/data/processed/df_final_full.parquet' 
+PROCESSED_DATA_PATH = 'data/processed/df_final_full.parquet'
+SELL_PRICES_PATH = 'data/sell_prices.csv'
+MODEL_SAVE_PATH = 'models/final_prophet_model.json'
 
-def load_and_aggregate_data(state_id: str):
+
+def load_and_aggregate_data(state_id: str) -> pd.DataFrame:
     """
-    Loads the full processed M5 dataset and aggregates total sales by date 
-    for a single specified STATE (e.g., 'CA') for fast model testing.
+    Load the processed sales data, merge in sell prices, and aggregate daily totals
+    for a target state (e.g., 'CA').
     """
     try:
-        # 1. Load the massive, clean Parquet file 
         df_full = pd.read_parquet(PROCESSED_DATA_PATH)
+        df_prices = pd.read_csv(SELL_PRICES_PATH)
     except FileNotFoundError:
-        print(f"Error: Processed data not found at {PROCESSED_DATA_PATH}. Check your path.")
+        print("ERROR: Data files not found. Check paths.")
         return pd.DataFrame()
 
-    # 2. FILTER: Select ONLY the rows belonging to the input state_id
     df_filtered = df_full[df_full['state_id'] == state_id].copy()
+    if df_filtered.empty:
+        print(f"WARNING: No rows found for state {state_id}.")
+        return pd.DataFrame()
 
-    # 3. AGGREGATE: Group the data by date ('ds') and sum up the sales ('y')
-    # This creates a single time series representing the TOTAL daily sales for all CA stores combined.
-    df_aggregate = df_filtered.groupby('ds').agg(
-        y=('y', 'sum'),
-        is_event=('is_event', 'max') 
-    ).reset_index()
-    
-    # return the data, along with the original DataFrame for a future optimization step
-    return df_aggregate, df_full.head(10) # Return a small sample of the full data for context if needed
+    df_merged = pd.merge(
+        df_filtered,
+        df_prices,
+        on=['store_id', 'item_id', 'wm_yr_wk'],
+        how='left'
+    )
+
+    df_aggregate = (
+        df_merged.groupby('ds')
+        .agg(
+            y=('y', 'sum'),
+            is_event=('is_event', 'max'),
+            avg_sell_price=('sell_price', 'mean'),
+        )
+        .reset_index()
+        .sort_values('ds')
+    )
+
+    df_aggregate['avg_sell_price'] = (
+        df_aggregate['avg_sell_price']
+        .fillna(method='ffill')
+        .fillna(method='bfill')
+    )
+    df_aggregate['ds'] = pd.to_datetime(df_aggregate['ds'])
+
+    print(f"Data aggregation complete for State {state_id}. Rows: {len(df_aggregate)}.")
+    return df_aggregate
+
 
 def create_time_features_for_ml(df: pd.DataFrame):
-    """Extracts required numerical features from the 'ds' column for linear models."""
-    
-    # 1. Extract Time Features
-    df['day_of_week'] = df['ds'].dt.dayofweek # 0=Monday, 6=Sunday
-    df['month'] = df['ds'].dt.month           # 1-12
-    # Keep the existing 'is_event' flag
+    """Extract required numerical features from the 'ds' column for linear models."""
+    df = df.copy()
+    df['ds'] = pd.to_datetime(df['ds'])
 
-    # 2. Convert Categorical Time Features (Day and Month) into Numbers
-    # One-hot encoding creates a new column for each unique value (e.g., 'day_of_week_0', 'day_of_week_1', etc.)
-    df_features = pd.get_dummies(df, columns=['day_of_week', 'month'], drop_first=True)
-    
-    # 3. Select final feature set
-    # Features (X) will be everything except the target 'y'
-    X = df_features.drop(columns=['ds', 'y'])
-    y = df_features['y']
-    
+    df['day_of_week'] = df['ds'].dt.dayofweek
+    df['month'] = df['ds'].dt.month
+
+    X = df.drop(columns=['ds', 'y'])
+    y = df['y']
+
+    X = pd.get_dummies(X, columns=['day_of_week', 'month'], drop_first=True)
     return X, y
 
-def train_prophet_model(df_train: pd.DataFrame):
-    """
-    Initializes, configures, and trains the Prophet model
-    using the aggregated time series data and external regressors.
-    """
-    # 1. Initialize Prophet with optimized seasonal settings for retail
-    m = Prophet(
-        seasonality_mode='multiplicative', # Good for sales data where magnitude of seasonality grows with trend
-        weekly_seasonality=True, 
-        yearly_seasonality=True 
-    )
-    
-    # 2. Add the external regressor (the feature engineered from calendar.csv)
-    # This tells Prophet to look at the 'is_event' column for predictive power.
-    m.add_regressor('is_event') 
-    
-    # 3. Fit the model to the training data
-    m.fit(df_train)
-    
-    return m
-    
-def train_ridge_model(df_aggregate: pd.DataFrame, store_id: str):
-    """
-    Trains a Ridge Regression model on engineered calendar features (Dhruv's Benchmark).
-    """
-    VAL_PERIOD = 28
-    
-    # 1. Initialize W&B Run
-    with wandb.init(project="InventoryAI-Capstone", name=f"Dhruv-Ridge-Benchmark-{store_id}", reinit=True) as run:
-        run.config.model_type = 'Ridge Regression (Scikit-learn)'
-        run.config.alpha = 1.0 # Ridge Hyperparameter
 
-        # 2. Prepare features (X) and target (y)
+def train_prophet_model(df_train: pd.DataFrame):
+    """Initialise and train the Prophet model with exogenous regressors."""
+    model = Prophet(
+        seasonality_mode='multiplicative',
+        weekly_seasonality=True,
+        yearly_seasonality=True,
+    )
+    model.add_regressor('is_event')
+    model.add_regressor('avg_sell_price')
+    model.fit(df_train)
+    return model
+
+
+def train_ridge_model(df_aggregate: pd.DataFrame, state_id: str):
+    """Train the Ridge Regression benchmark (Dhruv's solution)."""
+    if df_aggregate.empty:
+        print(f"WARNING: Skipping Ridge benchmark; no data for {state_id}.")
+        return {}
+
+    val_period = 28
+
+    with wandb.init(project="InventoryAI-Capstone", name=f"Dhruv-Ridge-Benchmark-{state_id}", reinit=True) as run:
+        run.config.model_type = 'Ridge Regression (Scikit-learn)'
+        run.config.alpha = 1.0
+
         X_all, y_all = create_time_features_for_ml(df_aggregate)
 
-        # 3. Split Data Time-Awarely (Train on past, validate on last 28 days)
-        X_train = X_all.iloc[:-VAL_PERIOD]
-        y_train = y_all.iloc[:-VAL_PERIOD]
-        
-        X_val = X_all.iloc[-VAL_PERIOD:]
-        y_val = y_all.iloc[-VAL_PERIOD:]
-        
-        # 4. Initialize and Train the Model
+        X_train = X_all.iloc[:-val_period]
+        y_train = y_all.iloc[:-val_period]
+        X_val = X_all.iloc[-val_period:]
+        y_val = y_all.iloc[-val_period:]
+
         model = Ridge(alpha=run.config.alpha)
         model.fit(X_train, y_train)
-        
-        # 5. Predict and Evaluate
         y_pred = model.predict(X_val)
-        
+
         metrics = calculate_metrics(y_val, y_pred)
-        
-        # 6. Log results to W&B
         run.log(metrics)
-        
-        print(f"\nRidge Benchmark Complete for {store_id}. Metrics Logged to W&B.")
-        
-    return metrics
 
-# Performance metrics for Prophet model
+        print(f"\nRidge benchmark complete for {state_id}. Metrics logged to W&B.")
+        return metrics
+
+
 def calculate_metrics(y_true, y_pred):
-    """Calculates Mean Absolute Error (MAE), RMSE, and Mean Absolute Percentage Error (MAPE)."""
-    
-    # 1. Calculate MAE: Average magnitude of errors.
+    """Calculate MAE, RMSE, and MAPE."""
     mae = mean_absolute_error(y_true, y_pred)
-    
-    # 2. Calculate RMSE: Penalizes larger errors more heavily.
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-
-    # 3. Calculate MAPE: Business-friendly error percentage, handling zero values safely.
-    # np.where ensures we don't divide by zero if actual sales (y_true) are 0.
-    y_true_safe = np.where(y_true == 0, 1, y_true) 
+    y_true_safe = np.where(y_true == 0, 1, y_true)
     mape = np.mean(np.abs((y_true - y_pred) / y_true_safe)) * 100
-    
+
     return {
-        'MAE': round(mae, 2), 
-        'MAPE': round(mape, 2), 
-        'RMSE': round(rmse, 2)
+        'MAE': round(mae, 2),
+        'MAPE': round(mape, 2),
+        'RMSE': round(rmse, 2),
     }
 
-# In src/model_engine.py (Place this function below calculate_metrics)
 
-def predict_naive_seasonal(df_aggregate: pd.DataFrame, store_id: str):
-    """
-    Predicts sales using the value from the same day in the previous week (Lag 7).
-    This establishes the minimum accuracy benchmark and logs the result to W&B.
-    """
-    VAL_PERIOD = 28
-    
-    # 1. Start the W&B Experiment Run (Assigns credit and name for the chart)
-    # The run name clearly labels Divij's contribution
-    with wandb.init(project="InventoryAI-Capstone", name=f"Divij-Naive-Baseline-{store_id}", reinit=True) as run:
-        
-        # Save configuration
+def predict_naive_seasonal(df_aggregate: pd.DataFrame, state_id: str):
+    """Compute the baseline error using a 7-day seasonal naive forecast."""
+    if df_aggregate.empty:
+        print(f"WARNING: Skipping naive benchmark; no data for {state_id}.")
+        return {}
+
+    val_period = 28
+    df_baseline = df_aggregate.copy()
+    df_baseline['y_lag_7'] = df_baseline['y'].shift(7)
+
+    with wandb.init(project="InventoryAI-Capstone", name=f"Divij-Naive-Baseline-{state_id}", reinit=True) as run:
         run.config.model_type = 'Seasonal Naive (Lag 7)'
-        run.config.store = store_id
-        
-        # 2. Create Lagged Column (The prediction)
-        # Variable name is generic: 'y_lag_7'
-        df_aggregate['y_lag_7'] = df_aggregate['y'].shift(7)
-        
-        # 3. Extract true values and predictions for the last 28-day validation period
-        df_val = df_aggregate.iloc[-VAL_PERIOD:].copy()
-        
+        run.config.state = state_id
+
+        df_val = df_baseline.iloc[-val_period:].copy()
         y_true = df_val['y'].values
         y_pred = df_val['y_lag_7'].values
-        
-        # 4. Evaluate Metrics
+
         metrics = calculate_metrics(y_true, y_pred)
-        
-        # 5. Log results to W&B
         run.log(metrics)
-        
-        print(f"\nNaive Baseline Complete for {store_id}. Metrics Logged to W&B:")
-        print(metrics)
-        
-    return metrics
+
+        print(f"\nNaive baseline complete for {state_id}. Metrics logged to W&B.")
+        return metrics
+
+
+def save_prophet_model(model_object, path=MODEL_SAVE_PATH):
+    """Persist the final Prophet model to JSON for deployment."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as fout:
+        json.dump(model_to_json(model_object), fout)
+    print(f"\nSUCCESS: Final model saved for deployment at: {path}")
+
 
 if __name__ == '__main__':
     TEST_STATE = 'CA'
-    VAL_PERIOD = 28 # Days to hold out for testing/validation
+    VAL_PERIOD = 28
 
-    # --- 1. Load Data ---
-    df_aggregate, _ = load_and_aggregate_data(TEST_STATE)
-    
-    # --- 2. Split Data for Validation ---
-    # a. Training Data: Use all data except the last 28 days
+    df_aggregate = load_and_aggregate_data(TEST_STATE)
+    if df_aggregate.empty:
+        raise SystemExit(f"No data available for state {TEST_STATE}.")
+
     df_train_only = df_aggregate.iloc[:-VAL_PERIOD].copy()
-    
-    # b. Validation Data: The last 28 days (TRUE values)
     df_validation_true = df_aggregate.iloc[-VAL_PERIOD:].copy()
-    
-    # --- 3. Initialize W&B Run ---
+
     with wandb.init(project="InventoryAI-Capstone", name="Ngawang-Prophet-Baseline-CA") as run:
-        
-        # Save key settings to W&B (for comparison later)
         run.config.model_type = 'Prophet'
         run.config.validation_days = VAL_PERIOD
-        run.config.regressor_count = 1 # We only added 'is_event'
+        run.config.regressors = ['is_event', 'avg_sell_price']
 
-        # --- 4. TRAIN the model on the smaller training set ---
-        prophet_model = train_prophet_model(df_train_only) 
+        prophet_model = train_prophet_model(df_train_only)
 
-        # --- 5. GENERATE PREDICTION on the validation dates ---
-        
-        # Create the future dataframe (must use the dates from the holdout set)
         df_validation_future = prophet_model.make_future_dataframe(periods=VAL_PERIOD, include_history=False)
-        
-        # CRITICAL: Add the 'is_event' regressor for the future/validation period
-        df_validation_future['is_event'] = df_validation_true['is_event'].reset_index(drop=True)
+        df_validation_future['is_event'] = df_validation_true['is_event'].reset_index(drop=True).values
+        df_validation_future['avg_sell_price'] = df_validation_true['avg_sell_price'].reset_index(drop=True).values
 
-        # Generate prediction
         forecast_validation = prophet_model.predict(df_validation_future)
-        
-        # --- 6. CALCULATE AND LOG METRICS ---
-        
-        # True sales values
+
         y_true = df_validation_true['y'].values
-        # Predicted sales values
         y_pred = forecast_validation['yhat'].values
-        
+
         metrics = calculate_metrics(y_true, y_pred)
-        
-        # Log the final scores to the W&B dashboard!
-        run.log(metrics) 
-        
-        print("\nValidation Complete. Metrics Logged to W&B:")
+        run.log(metrics)
+
+        print("\nValidation complete. Metrics logged to W&B:")
         print(metrics)
 
-    # --- Divij's Naive Baseline Test ---
-    TEST_STATE = 'WI' 
-    
-    # We load the data for the assigned test set
-    df_divij, _ = load_and_aggregate_data(TEST_STATE) 
-    
-    # 💡 The function is called generically, and the result is stored in a generic variable:
-    naive_metrics = predict_naive_seasonal(df_divij, TEST_STATE)
-    
-    print(f"\nFinal Naive Baseline Test Complete. Metrics: {naive_metrics}")
+    TEST_STATE_NAIVE = 'WI'
+    df_divij = load_and_aggregate_data(TEST_STATE_NAIVE)
+    naive_metrics = predict_naive_seasonal(df_divij, TEST_STATE_NAIVE)
+    if naive_metrics:
+        print(f"\nFinal naive baseline metrics ({TEST_STATE_NAIVE}): {naive_metrics}")
 
-    # --- Dhruv's Ridge Regression Test ---
-    TEST_STATE_DHRUV = 'CA' 
-    # We load the data for Dhruv's assigned test set (CA aggregate)
-    df_dhruv, _ = load_and_aggregate_data(TEST_STATE_DHRUV) 
-
-    # Run the Ridge model and log results to W&B
+    TEST_STATE_DHRUV = 'CA'
+    df_dhruv = load_and_aggregate_data(TEST_STATE_DHRUV)
     ridge_metrics = train_ridge_model(df_dhruv, TEST_STATE_DHRUV)
-    print(f"\nDhruv's Ridge Metrics ({TEST_STATE_DHRUV}): {ridge_metrics}")
-    
+    if ridge_metrics:
+        print(f"\nDhruv's Ridge metrics ({TEST_STATE_DHRUV}): {ridge_metrics}")
+
+    df_train_full = df_aggregate.copy()
+    with wandb.init(project="InventoryAI-Capstone", name="FINAL-PROPHET-MODEL-CA", reinit=True) as run:
+        run.config.model_type = 'Prophet (Final Deployment Version)'
+        run.config.regressors = ['is_event', 'avg_sell_price']
+
+        final_prophet_model = train_prophet_model(df_train_full)
+        save_prophet_model(final_prophet_model)
+
+    print("\nModel finalisation complete. Model ready for UI integration.")
