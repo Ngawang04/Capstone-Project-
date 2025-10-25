@@ -56,14 +56,14 @@ For the most current status, task assignments, and detailed progress on the **In
 ---
 
 ## How to Run the Project (Midterm Delivery)
-
+Switch to test_mvp branch for MVP demo
 
 
 ---
 
 ## Cost Breakdown(estimated)
 
-- **OpenAI GPT-4 API:** ~$0.02–$0.04 per explanation/Q&A (~$5–10 for class demo)
+- **OpenAI gpt-4o-mini API:** ~$0.02–$0.04 per explanation/Q&A (~$5–10 for class demo)
 - **AWS Hosting (EC2, RDS, S3):** $25–50/month (after free tier, for small-scale use)
 - **Domain (if used):** ~$10–30/year
 - **Open-source dependencies:** Free
