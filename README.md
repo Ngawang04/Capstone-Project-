@@ -71,14 +71,14 @@ To run the app on your local machine, you must run both servers in two separate 
 
 Terminal 1 (Run the "Brain"):
 
-# Set your secret key
+### Set your secret key
 export OPENAI_API_KEY='sk-YOUR_KEY_HERE'
-# Run the Python server
+### Run the Python server
 python3 src/app_api.py
 
 
 Terminal 2 (Run the "Face"):
 
-# Run the simple web server
+### Run the simple web server
 python3 -m http.server 8000
-# Open http://localhost:8000/index.html in your browser
+### Open http://localhost:8000/index.html in your browser
