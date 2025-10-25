@@ -1,99 +1,84 @@
-# InventoryAI
+InventoryAI
 
-**AI-Powered Inventory Forecasting and Optimization Platform**
+An AI-Powered Inventory Forecasting and Optimization Platform (MVP)
 
----
+Description
 
-## Description
+InventoryAI is a cloud-native web application that empowers small businesses to make smarter, data-driven inventory decisions.
 
-InventoryAI is a streamlined, cloud-based web application that empowers small and medium businesses to make smarter inventory decisions. Users upload sales or inventory data and instantly receive advanced, AI-powered forecasts, optimal reorder recommendations, and simple plain-English explanations—all delivered through an intuitive and secure dashboard.
+This MVP prototype demonstrates a complete, end-to-end architecture:
 
----
+A modern, responsive HTML/JavaScript frontend (deployed on Netlify).
 
-## Key Features
+A robust Python backend API (deployed on Render).
 
-- **Data Upload:** Drag-and-drop CSV/Excel sales/inventory files with validation and instant preview.
-- **Automated Forecasting:** Accurate, multi-product demand forecasts powered by Prophet and scikit-learn.
-- **Smart Reorder Recommendations:** Clear reorder quantities and timing for every product.
-- **Interactive Visualization:** Dynamic charts and tables for sales, forecasts, and inventory health.
-- **AI Explanations & Q&A:** Business-friendly, GPT-4-powered explanations of forecasts and stock alerts.
-- **Downloadable Reports:** Export recommendations and analytics as PDF or Excel files.
-- **Secure Accounts:** AWS Cognito-based signup/login, with user-specific data isolation.
-- **Persistent Cloud Storage:** AWS S3 file storage and PostgreSQL database for uploads, results, and user info.
-- **Mobile-Friendly UI:** Responsive Streamlit dashboard for desktop, tablet, and mobile devices.
+A live, secure integration with GPT-4o Mini for real-time AI analysis and chat.
 
----
+Users can upload their daily sales CSV, and the application will validate the data, generate a (simulated) item-level forecast, and provide live, actionable insights from an AI analyst.
 
-## Tech Stack
+Key Features (MVP)
 
-### Frontend (and Fullstack UI)
-- **Python 3.12.8
-- **Streamlit** (UI components, routing, application logic)
-- **Plotly/Streamlit Native Charts** (visualizations)
-- **AWS Cognito** (authentication)
+Modern & Responsive UI: A clean, clutter-free dashboard built with Tailwind CSS.
 
-### Backend & Infrastructure
-- **Prophet** (AI forecasting engine)
-- **scikit-learn** (feature engineering, ML experiments, benchmarking)
-- **OpenAI GPT-4 API** (AI explanations and chat)
-- **PostgreSQL** (via AWS RDS, managed database service)
-- **AWS S3** (secure file/storage for uploads and reports)
-- **AWS EC2 / Elastic Beanstalk** (cloud app deployment)
-- **APIs for holidays, events, and optionally weather** (data enrichment)
+Robust CSV Validation: Python backend validates any user-uploaded CSV for required columns (date, sales, item) and data length (>30 days).
 
----
+Item-Level Forecast Simulation: Simulates a complex, item-level Prophet forecast to demonstrate the final product's UX without the 20-minute live training delay.
 
-## Project Progress and Status Tracking 📊
+Dynamic Bar Chart: A user-friendly, interactive Chart.js bar chart showing the recommended reorder quantity for each actual item from the user's file.
 
-For the most current status, task assignments, and detailed progress on the **InventoryAI** project, please refer to our dedicated, live project board. We are using a Kanban board to manage our workflow.
+Live AI-Powered Insights: Securely calls the OpenAI (GPT-4o Mini) API from the backend to provide a real, live analysis of the forecast data.
 
-➡️ **[InventoryAI Live Project Tracker on Notion](https://www.notion.so/27d4d5b4186f8013aefbfa84767d86d4?v=27d4d5b4186f803399b4000c947cf238&source=copy_link)** ⬅️
+Live AI Chat Assistant: A fully functional, ChatGPT-style chat window that allows users to ask follow-up questions about their reorder plan.
 
----
+Tech Stack (MVP Architecture)
 
+This project is built using a modern, secure, split-deployment (Jamstack) architecture.
 
+1. Frontend (The "Face")
 
----
+Technology: HTML, Tailwind CSS, JavaScript (ES6+)
 
-## How to Run the Project (Midterm Delivery)
+Libraries: Chart.js (for visualization)
 
+Deployment: Netlify (for continuous deployment from Git)
 
+2. Backend (The "Brain")
 
----
+Technology: Python, Flask (as a lightweight API server)
 
-## Cost Breakdown(estimated)
+Libraries: Pandas (for data validation), OpenAI (for AI chat)
 
-- **OpenAI GPT-4 API:** ~$0.02–$0.04 per explanation/Q&A (~$5–10 for class demo)
-- **AWS Hosting (EC2, RDS, S3):** $25–50/month (after free tier, for small-scale use)
-- **Domain (if used):** ~$10–30/year
-- **Open-source dependencies:** Free
+Deployment: Render (as a production-grade web service)
 
----
+Project Progress and Status Tracking 📊
 
-## Business Use Case
+For the most current status, task assignments, and detailed progress on the InventoryAI project, please refer to our dedicated, live project board:
 
-InventoryAI enables SMBs to:
-- Avoid stockouts and lost revenue by predicting future product demand
-- Prevent overstocking and excess cash tied up in inventory
-- Save time and reduce errors—transitioning from guesswork/spreadsheet management to data-driven, AI-supported recommendations
-- Understand the “why” behind every reorder or forecast, thanks to AI-powered natural-language explanations
+➡️ InventoryAI Live Project Tracker on Notion ⬅️
 
----
+How to Run the Project (Midterm Delivery)
 
-## Authors & Acknowledgements
+1. Live Deployed MVP (Recommended)
 
-**Authors**
--  Ngawang Choega
--  Dhruv Mane
--  Divij Acharya
+The full, interactive MVP is deployed to the cloud. The frontend (Netlify) is connected to the live backend API (Render).
+
+Simply click this link to run the application:
+https://inventoryaipro.netlify.app (Or your specific Netlify URL)
+
+2. How to Run Locally
+
+To run the app on your local machine, you must run both servers in two separate terminals:
+
+Terminal 1 (Run the "Brain"):
+
+# Set your secret key
+export OPENAI_API_KEY='sk-YOUR_KEY_HERE'
+# Run the Python server
+python3 src/app_api.py
 
 
-**Acknowledgements**
-- Prof. Darsh Joshi
-- Thanks to Prophet, OpenAI, Streamlit, AWS, and the open-source/data science community
+Terminal 2 (Run the "Face"):
 
----
-
-_For questions or issues, open a GitHub issue or reach out to a project author._
-
-
+# Run the simple web server
+python3 -m http.server 8000
+# Open http://localhost:8000/index.html in your browser
