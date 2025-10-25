@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InventoryAI | Demand Forecast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .card { 
+            background-color: #ffffff;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover { 
+            transform: translateY(-4px); 
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+        .metric-value { font-size: 2.25rem; font-weight: 700; }
+        .chart-container { min-height: 400px; max-width: 100%; }
+        #chatWindow { scrollbar-width: thin; scrollbar-color: #9ca3af #e5e7eb; }
+        #chatWindow::-webkit-scrollbar { width: 6px; }
+        #chatWindow::-webkit-scrollbar-thumb { background-color: #9ca3af; border-radius: 3px; }
+        .user-message { 
+            background-color: #3b82f6; color: white;
+            padding: 8px 12px; border-radius: 12px 12px 0 12px; 
+            max-width: 90%; margin-left: auto; text-align: left; word-wrap: break-word;
+        }
+        .analyst-message { 
+            background-color: #e5e7eb; color: #1f2937;
+            padding: 8px 12px; border-radius: 12px 12px 12px 0; 
+            max-width: 90%; margin-right: auto; text-align: left; word-wrap: break-word;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="app" class="p-4 md:p-8 max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="bg-white shadow-md rounded-xl p-6 mb-8 flex justify-between items-center">
+            <div class="flex items-center">
+                 <svg class="w-10 h-10 text-indigo-600 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12M3.75 3h16.5v13.5A2.25 2.25 0 0 1 18 18.75h-5.25a2.25 2.25 0 0 1-2.25-2.25V3.75m0 0h-3.75m3.75 0a2.25 2.25 0 0 1 2.25 2.25V11.25m6-7.5a2.25 2.25 0 0 0-2.25-2.25H3.75" />
+                </svg>
+                <h1 class="text-3xl font-extrabold text-gray-900">InventoryAI Pro</h1>
+            </div>
+            <span class="text-sm font-medium text-gray-500 hidden sm:block">Sales Forecasting (MVP)</span>
+        </header>
+
+        <!-- Main Dashboard Layout -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Column 1: Controls & Status -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="card p-6 space-y-4">
+                    <h2 class="text-xl font-semibold text-gray-700 border-b pb-2">Forecast Controls</h2>
+                    
+                    <div>
+                        <label for="fileUpload" class="block text-sm font-medium text-gray-700 mb-2">Upload Sales Data (CSV)</label>
+                        <input type="file" id="fileUpload" accept=".csv"
+                               class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                        <p class="text-xs text-gray-500 mt-2">
+                            **Input Requirements:** CSV must have a header row and >30 days of data.
+                            <br/>- 1. Date column (named 'ds' or 'date')
+                            <br/>- 2. Sales column (named 'y' or 'sales')
+                            <br/>- 3. Item column (named 'item' or 'product')
+                        </p>
+                    </div>
+
+                    <button id="forecastButton" 
+                            class="w-full bg-indigo-600 text-white p-3 rounded-xl font-bold hover:bg-indigo-700 transition duration-150 shadow-md flex items-center justify-center space-x-2">
+                        <svg id="loadingSpinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span id="buttonText">Generate Strategic Forecast</span>
+                    </button>
+                    <!-- Status message for errors or success -->
+                    <div id="statusMessage" class="text-sm font-medium text-center pt-2 hidden"></div>
+                </div>
+
+                <!-- 
+                  *** UI/UX IMPROVEMENT ***
+                  The "Actionable AI Insight" box is REMOVED.
+                  It is now combined with the Chat Assistant for a seamless, modern experience.
+                -->
+
+                <!-- AI CHAT ASSISTANT (NOW LIVE) -->
+                <div id="aiChat" class="card p-6 space-y-4">
+                    <h2 class="text-xl font-semibold text-gray-700">💬 Chat with the AI Analyst</h2>
+                    <!-- The AI's initial summary will now appear here -->
+                    <div id="chatWindow" class="h-64 overflow-y-auto border p-2 rounded-lg bg-gray-50 text-sm space-y-3">
+                        <div class="analyst-message">Analyst: Hello! Please upload your sales data to begin.</div>
+                    </div>
+                    <!-- This is the new "ChatGPT-style" input bar -->
+                    <div class="relative">
+                        <input type="text" id="chatInput" placeholder="Upload data to start chat..." 
+                               class="w-full p-3 pr-12 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled>
+                        <button id="sendChat" disabled class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-gray-300 text-gray-500 rounded-md cursor-not-allowed transition-colors">
+                            <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L6 12Zm0 0h7.5" />
+                            </svg>
+                        </button>
+                    </div>
+                    <!-- Model Mention (as requested) -->
+                    <p class="text-xs text-center text-gray-400 mt-1">
+                        Powered by GPT-4o Mini
+                    </p>
+                </div>
+            </div>
+
+            <!-- Column 2 & 3: Metrics and Chart -->
+            <div class="lg:col-span-2 space-y-8">
+                
+                <!-- Metric Cards (NOW WITH ICONS) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="card p-5 flex items-center space-x-4">
+                        <div class="flex-shrink-0 bg-red-100 rounded-full p-3">
+                            <svg class="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.374c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase">Average Item Miss</p>
+                            <p class="metric-value text-red-500" data-metric="mae">N/A</p>
+                        </div>
+                    </div>
+                    <div class="card p-5 flex items-center space-x-4">
+                        <div class="flex-shrink-0 bg-emerald-100 rounded-full p-3">
+                            <svg class="h-6 w-6 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase">Forecast Accuracy</p>
+                            <p class="metric-value text-emerald-600" data-metric="mape">N/A</p>
+                        </div>
+                    </div>
+                    <div class="card p-5 flex items-center space-x-4">
+                        <div class="flex-shrink-0 bg-indigo-100 rounded-full p-3">
+                             <svg class="h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1-1.414 1.414l-4.896 4.896A2.25 2.25 0 0 1 3 22.25V2.25a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 2.25v19.5m-18 0h18M9 11.25a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase">Top Reorder Qty</p>
+                            <p class="metric-value text-indigo-600" data-metric="demand">N/A</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Visualization (BAR CHART) -->
+                <div class="card p-6">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">Recommended Reorder Quantity (Next 7 Days)</h2>
+                    <div class="chart-container">
+                        <canvas id="forecastChart"></canvas>
+                        <p id="chartMessage" class="text-center text-gray-500 mt-4">Upload a file and click 'Generate Forecast' to view item-level recommendations.</p>
+                    </div>
+                </div>
+
+                <!-- Download Panel - ** BUG FIX: ID is now correct ** -->
+                <div class="card p-6">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-3">Export Results</h2>
+                    <a id="downloadButton" 
+                            class="block w-full text-center bg-gray-400 text-white p-3 rounded-xl font-bold cursor-not-allowed no-underline">
+                        Download Reorder Plan (CSV)
+                    </a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 3. JavaScript for Logic and AI Integration -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <script>
+        // --- 1. CONFIGURATION ---
+        // This MUST be replaced with your live deployed Render/AWS URL
+        // For local testing TONIGHT, use: "http://localhost:5000/api/forecast"
+        const PYTHON_API_URL = "http://localhost:5000/api/forecast"; 
+        const CHAT_API_URL = "http://localhost:5000/api/chat"; 
+        
+        // --- 2. GLOBAL STATE ---
+        let chatHistory = []; 
+        let isForecastAvailable = false; 
+        let PROCESSED_DATA_TEXT = null; 
+        let CURRENT_FORECAST = null; 
+        let CURRENT_METRICS = null; 
+
+        // --- 3. CORE LOGIC ---
+        
+        // Appends a message to the chat UI
+        function appendMessage(sender, message, isUser = false) {
+            const chatWindow = document.getElementById('chatWindow');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = isUser ? 'user-message' : 'analyst-message';
+            messageDiv.innerHTML = message;
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+        
+        // **FIXED:** This function is now defined, resolving the ReferenceError
+        // Enables or disables the chat input
+        function toggleChat(enable) {
+            const chatInput = document.getElementById('chatInput');
+            const sendButton = document.getElementById('sendChat');
+            sendButton.disabled = !enable;
+            sendButton.classList.toggle('bg-indigo-600', enable);
+            sendButton.classList.toggle('text-white', enable);
+            sendButton.classList.toggle('bg-gray-300', !enable);
+            sendButton.classList.toggle('text-gray-500', !enable);
+            sendButton.classList.toggle('cursor-not-allowed', !enable);
+            chatInput.placeholder = enable ? "Ask about this forecast..." : "Upload data to start chat...";
+            chatInput.disabled = !enable;
+            isForecastAvailable = enable;
+        }
+
+        // Reads the user's uploaded file as raw text
+        function readUserFile() {
+            return new Promise((resolve, reject) => {
+                const fileInput = document.getElementById('fileUpload');
+                const file = fileInput.files[0];
+                if (!file) {
+                    reject(new Error('Please select a CSV file to upload.'));
+                }
+                if (!file.name.endsWith('.csv')) {
+                    reject(new Error('Only CSV files are supported.'));
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    PROCESSED_DATA_TEXT = e.target.result; 
+                    resolve(PROCESSED_DATA_TEXT);
+                };
+                reader.onerror = (e) => reject(new Error(`File read error: ${e.target.error.name}`));
+                reader.readAsText(file);
+            });
+        }
+
+        // Renders the ITEM-LEVEL forecast as a BAR CHART
+        function renderChart(forecastData) {
+            const ctx = document.getElementById('forecastChart').getContext('2d');
+            
+            const data = {
+                labels: forecastData.map(row => row.item_name), // Item Names
+                datasets: [
+                    {
+                        label: 'Recommended Reorder Quantity',
+                        data: forecastData.map(row => row.reorder_qty), // Reorder Numbers
+                        backgroundColor: 'rgba(79, 70, 229, 0.8)', // Indigo
+                        borderColor: '#4f46e5',
+                        borderWidth: 2,
+                        borderRadius: 4,
+                    }
+                ]
+            };
+
+            if (window.forecastChartInstance) window.forecastChartInstance.destroy();
+            
+            window.forecastChartInstance = new Chart(ctx, {
+                type: 'bar', // This is a bar chart for item quantities
+                data: data,
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { 
+                        y: { beginAtZero: true, title: { display: true, text: 'Units to Reorder' } },
+                        x: { title: { display: true, text: 'Product' } }
+                    },
+                    plugins: { 
+                        legend: { display: false }, // Hide legend for a cleaner look
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Reorder: ${context.parsed.y} units`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            document.getElementById('chartMessage').classList.add('hidden');
+        }
+
+        // Updates the three metric cards
+        function updateMetrics(metrics) {
+            document.querySelector('[data-metric="mae"]').textContent = `${metrics.MAE.toFixed(1)} Units`;
+            document.querySelector('[data-metric="mape"]').textContent = `${metrics.ACCURACY.toFixed(1)}%`; 
+            document.querySelector('[data-metric="demand"]').textContent = `${metrics.DEMAND.toLocaleString('en-US', { maximumFractionDigits: 0 })} Units`;
+        }
+        
+        // **FIXED:** This function now correctly finds the 'downloadButton' ID
+        // Creates the data for the Download CSV button
+        function updateDownloadLink(forecastData) {
+            const csvContent = "data:text/csv;charset=utf-8," 
+                               + encodeURIComponent("Item,Reorder Quantity\n" 
+                               + forecastData.map(row => 
+                                   // Ensure item names with commas are wrapped in quotes
+                                   `"${row.item_name}",${row.reorder_qty}`
+                               ).join('\n'));
+            
+            const downloadButton = document.getElementById('downloadButton');
+            // This check prevents the 'cannot set properties of null' error
+            if (downloadButton) { 
+                downloadButton.href = csvContent;
+                downloadButton.download = `inventoryai_reorder_plan.csv`;
+                downloadButton.disabled = false;
+                downloadButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                downloadButton.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+                downloadButton.textContent = "Download Reorder Plan (CSV)";
+            }
+        }
+
+        // --- 4. MAIN EVENT HANDLER (When user clicks "Generate Forecast") ---
+        document.getElementById('forecastButton').addEventListener('click', async () => {
+            const button = document.getElementById('forecastButton');
+            const buttonText = document.getElementById('buttonText');
+            const spinner = document.getElementById('loadingSpinner');
+            const status = document.getElementById('statusMessage');
+            
+            // 1. Reset UI
+            button.disabled = true;
+            buttonText.textContent = 'Forecasting...';
+            spinner.classList.remove('hidden');
+            status.classList.remove('text-red-500', 'text-green-600');
+            status.textContent = 'Processing request...';
+            status.classList.remove('hidden');
+            document.getElementById('chatWindow').innerHTML = ''; // Clear chat
+            toggleChat(false);
+            chatHistory = []; 
+            
+            try {
+                // 2. READ THE USER FILE
+                await readUserFile(); 
+                status.textContent = `File loaded. Sending to Python server for validation and simulation... (This may take 5-10 seconds)`;
+                
+                // 3. CALL PYTHON API (This is the "Brain")
+                const apiResponse = await fetch(PYTHON_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' }, // Send raw CSV text
+                    body: PROCESSED_DATA_TEXT
+                });
+
+                if (!apiResponse.ok) {
+                    const err = await apiResponse.json();
+                    throw new Error(err.error || `API Server Error ${apiResponse.status}`);
+                }
+
+                const result = await apiResponse.json();
+                
+                // 4. Update Global State
+                CURRENT_FORECAST = result.forecast; // This is now the item list
+                CURRENT_METRICS = result.metrics;
+
+                // 5. Process and Display Results
+                updateMetrics(CURRENT_METRICS);
+                renderChart(CURRENT_FORECAST); // Render the new bar chart
+                updateDownloadLink(CURRENT_FORECAST); // This will now work
+
+                // 6. Display AI Recommendation
+                // *** NEW FLOW: Add the first insight to the chat window ***
+                appendMessage("Analyst", result.ai_insight); // Post insight to chat
+                chatHistory.push({ sender: "Analyst", message: result.ai_insight });
+
+                toggleChat(true); // Enable chat
+                
+                status.textContent = 'Forecast complete. Recommendation ready.';
+                status.classList.add('text-green-600');
+
+            } catch (error) {
+                toggleChat(false); 
+                console.error('Forecast initiation failed:', error);
+                status.textContent = `Forecast failed: ${error.message}`;
+                status.classList.add('text-red-500');
+            } finally {
+                button.disabled = false;
+                buttonText.textContent = 'Generate Strategic Forecast';
+                spinner.classList.add('hidden');
+            }
+        });
+        
+        // --- 5. CHAT EVENT HANDLER (NOW LIVE) ---
+        const chatInput = document.getElementById('chatInput');
+        const sendChatButton = document.getElementById('sendChat');
+        
+        const handleChatSend = async () => {
+            const userMessage = chatInput.value.trim();
+            if (userMessage === '' || !isForecastAvailable) return;
+            
+            appendMessage("User", userMessage, true);
+            chatHistory.push({ sender: "User", message: userMessage });
+            chatInput.value = ''; // Clear input
+            sendChatButton.disabled = true;
+
+            try {
+                // Call the NEW chat API endpoint
+                const apiResponse = await fetch(CHAT_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: userMessage,
+                        forecast: CURRENT_FORECAST, // Send current context
+                        metrics: CURRENT_METRICS
+                    })
+                });
+
+                if (!apiResponse.ok) {
+                    const err = await apiResponse.json();
+                    throw new Error(err.error || `API Server Error ${apiResponse.status}`);
+                }
+                
+                const result = await apiResponse.json();
+                appendMessage("Analyst", result.response);
+                chatHistory.push({ sender: "Analyst", message: result.response });
+
+            } catch (error) {
+                console.error("Chat Error:", error);
+                appendMessage("Analyst", `<span class="text-red-500">❌ Service Error: ${error.message}</span>`);
+            } finally {
+                sendChatButton.disabled = false;
+                chatInput.focus();
+            }
+        };
+
+        sendChatButton.addEventListener('click', handleChatSend);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !sendChatButton.disabled) handleChatSend();
+        });
+
+        // --- 6. INITIALIZE PAGE ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // **FIXED:** This code now runs *after* the page loads,
+            // so 'aiChat' and 'toggleChat' are guaranteed to exist.
+            toggleChat(false); // Start with chat disabled
+            
+            // Hide the old static recommendation box
+            const recBox = document.getElementById('aiRecommendation');
+            if (recBox) {
+                recBox.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
+
